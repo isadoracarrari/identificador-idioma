@@ -2,7 +2,7 @@
 identificador_idioma.py
 =======================
 Identifica o idioma de uma página web comparando a frequência de letras
-do texto com perfis de referência carregados de 'letter_frequency.csv'.
+do texto com perfis de referência carregados de 'letter-frequencies.csv'.
 
 Uso:
     python identificador_idioma.py
@@ -15,15 +15,16 @@ Dependências:
     pip install requests
 """
 
-import sys #para argumentos de linha de comando e saída de erros
-import re #para expressões regulares na limpeza do HTML, localizar e substituir texto
-import csv #para ler o arquivo CSV de perfis de frequência
-import math #fornece funções matemáticas para cálculos de distância e similaridade
-import unicodedata #para lidar com complexidade de caracteres, normalização e remoção de acentos
-from pathlib import Path #para manipulação de caminhos de arquivos em qualquer sistema operacional (Windows, Linux, etc.)
+import sys
+import re
+import csv
+import math
+import html
+import unicodedata
+from pathlib import Path
 
-try: #é uma rede de segurança em caso de erro
-    import requests #para fazer requisições HTTP e baixar o conteúdo da página
+try:
+    import requests
 except ImportError:
     sys.exit("Erro: instale a biblioteca requests  →  pip install requests")
 
@@ -35,17 +36,17 @@ except ImportError:
 def baixar_texto(url: str) -> str:
     """Faz o download de uma URL e retorna o texto bruto da resposta."""
     try:
-        headers = { 
-            "User-Agent": ( #User-Agent comum para evitar bloqueios por parte de alguns sites, se "disfarça" de navegador moderno
+        headers = {
+            "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
                 "Chrome/124.0.0.0 Safari/537.36"
             )
         }
-        resposta = requests.get(url, headers=headers, timeout=15) #O programa acessa a URL e baixa seu conteúdo. Timeout de 15 segundos para evitar ficar preso em sites lentos ou que nao respondem
-        resposta.raise_for_status() #Verifica se o programa deu certo
+        resposta = requests.get(url, headers=headers, timeout=15)
+        resposta.raise_for_status()
     except requests.exceptions.MissingSchema:
-        sys.exit(f"Erro: URL inválida -> '{url}'. Inclua o esquema (https://...)") #Verifica se a URL tem um esquema válido (http:// ou https://)
+        sys.exit(f"Erro: URL inválida -> '{url}'. Inclua o esquema (https://...)")
     except requests.exceptions.ConnectionError:
         sys.exit(f"Erro: nao foi possivel conectar a '{url}'.")
     except requests.exceptions.Timeout:
@@ -53,8 +54,8 @@ def baixar_texto(url: str) -> str:
     except requests.exceptions.HTTPError as e:
         sys.exit(f"Erro HTTP: {e}")
 
-    resposta.encoding = resposta.apparent_encoding #Tenta detectar a codificação correta do texto para evitar problemas com acentuação
-    return resposta.text #Retorna o conteúdo HTML bruto da página como uma string
+    resposta.encoding = resposta.apparent_encoding
+    return resposta.text
 
 
 # ─────────────────────────────────────────────
@@ -74,7 +75,7 @@ _RE_PARAGRAFOS = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 
-# Fallback: extrai li e section se parágrafos não forem encontrados
+# Fallback: extrai li e section se paragrafos nao forem encontrados
 _RE_FALLBACK = re.compile(
     r"<(li|section|div)[^>]*>(.*?)</\1>",
     re.IGNORECASE | re.DOTALL,
@@ -87,7 +88,7 @@ _RE_TAG_GENERICA = re.compile(r"<[^>]+>")
 _RE_ENTIDADE = re.compile(r"&[a-zA-Z0-9#]+;")
 
 
-def _extrair_texto_html(html: str) -> str:
+def _extrair_texto_html(texto_html: str) -> str:
     """
     Extrai o texto visivel de uma pagina HTML:
     1. Remove blocos de ruido (script, style, nav, footer, head) por completo.
@@ -97,30 +98,30 @@ def _extrair_texto_html(html: str) -> str:
     3. Fallback para <li>/<section>/<div> se nenhum paragrafo for encontrado.
     """
     # Passo 1: apaga blocos irrelevantes inteiros
-    html = _RE_BLOCOS_RUIDO.sub(" ", html) #Substitui blocos inteiros por espaço para evitar concatenação de palavras quando removemos as tags
+    texto_html = _RE_BLOCOS_RUIDO.sub(" ", texto_html)
 
     # Passo 2: coleta paragrafos e titulos
-    trechos = _RE_PARAGRAFOS.findall(html) #Retorna uma lista de tuplas (tag, conteúdo) para cada bloco encontrado
+    trechos = _RE_PARAGRAFOS.findall(texto_html)
 
     if not trechos:
         # Fallback: tenta li/section/div se a pagina nao usa <p>
-        trechos = _RE_FALLBACK.findall(html) #Se ainda assim nao encontrar nada, o resultado final sera vazio
+        trechos = _RE_FALLBACK.findall(texto_html)
 
     if trechos:
-        conteudo = " ".join(c for _, c in trechos) #Concatena apenas o conteúdo dos blocos encontrados, ignorando as tags
+        conteudo = " ".join(c for _, c in trechos)
     else:
-        # Último recurso: remove todas as tags genericamente
-        conteudo = _RE_TAG_GENERICA.sub(" ", html) #Se não encontrar nenhum bloco confiável, extrair o texto bruto removendo todas as tags. Isso pode incluir muito ruído, mas evita que o resultado fique vazio.
+        # Ultimo recurso: remove todas as tags genericamente
+        conteudo = _RE_TAG_GENERICA.sub(" ", texto_html)
 
-    # Remove tags internas residuais e entidades HTML
-    conteudo = _RE_TAG_GENERICA.sub(" ", conteudo) #Remove qualquer tag que tenha sobrado dentro do conteúdo extraído (ex: <p>Texto <b>importante</b></p> -> "Texto importante")
-    conteudo = _RE_ENTIDADE.sub(" ", conteudo) #Remove entidades HTML comuns (ex: &amp; -> " ", &nbsp; -> " ", &#123; -> " "). Isso evita que caracteres como & ou espaços extras aparecam no texto final.
-    return conteudo #Retorna o texto limpo, contendo apenas o conteúdo textual relevante da página
+    # Remove tags internas residuais e converte entidades HTML para caracteres reais
+    conteudo = _RE_TAG_GENERICA.sub(" ", conteudo)
+    conteudo = html.unescape(conteudo)
+    return conteudo
 
 
-def limpar_texto(texto: str, remover_acentos: bool = False) -> str: 
+def limpar_texto(texto: str, remover_acentos: bool = False) -> str:
     """
-    Extrai texto relevante do HTML e retorna apenas letras em minúsculas.
+    Extrai texto relevante do HTML e retorna apenas letras em minusculas.
     Se remover_acentos=True, converte letras acentuadas para base ASCII.
     """
     texto = _extrair_texto_html(texto)
@@ -133,30 +134,30 @@ def limpar_texto(texto: str, remover_acentos: bool = False) -> str:
         texto = unicodedata.normalize("NFD", texto)
         texto = "".join(c for c in texto if unicodedata.category(c) != "Mn")
 
-    # Mantém apenas letras (categoria Unicode "L*")
+    # Mantem apenas letras (categoria Unicode "L*")
     texto = "".join(c for c in texto if unicodedata.category(c).startswith("L"))
 
     return texto
 
 
 # ─────────────────────────────────────────────
-# 3. Cálculo de frequência
+# 3. Calculo de frequencia
 # ─────────────────────────────────────────────
 
 def calcular_frequencia(texto_limpo: str) -> dict:
     """
-    Calcula a frequência relativa (0-100) de cada letra no texto.
-    Retorna um dicionário, uma lista de pares chave: valor, onde a chave é a letra e o valor é seu percentual {letra: percentual}.
+    Calcula a frequencia relativa (0-100) de cada letra no texto.
+    Retorna um dicionario {letra: percentual}.
     """
     if not texto_limpo:
         sys.exit("Erro: o texto ficou vazio apos a limpeza. Verifique a URL.")
 
     contagem = {}
-    for letra in texto_limpo: #percorre o texto, uma letra de cada vez, e conta quantas vezes cada letra aparece. O resultado é um dicionário onde a chave é a letra e o valor é a quantidade de vezes que ela aparece no texto
+    for letra in texto_limpo:
         contagem[letra] = contagem.get(letra, 0) + 1
 
-    total = sum(contagem.values()) #soma a contagem de todas as letras para saber o total
-    return {letra: (qtd / total) * 100 for letra, qtd in contagem.items()} #Gera o dicionário final. Para cada par letra: quantidade no dicionário contagem, ele calcula o percentual ((qtd / total) * 100) e retorna o resultado.
+    total = sum(contagem.values())
+    return {letra: (qtd / total) * 100 for letra, qtd in contagem.items()}
 
 
 # ─────────────────────────────────────────────
@@ -169,31 +170,31 @@ def _parse_pct(valor: str) -> float:
     return float(valor) if valor else 0.0
 
 
-def carregar_perfis(caminho_csv: str = "letter_frequency.csv") -> dict:
+def carregar_perfis(caminho_csv: str = "letter-frequencies.csv") -> dict:
     """
-    Lê o arquivo CSV e retorna:
+    Le o arquivo CSV e retorna:
         { idioma: { letra: percentual, ... }, ... }
     """
     caminho = Path(caminho_csv)
     if not caminho.exists():
         sys.exit(
             f"Erro: arquivo '{caminho_csv}' nao encontrado.\n"
-            "Coloque o arquivo letter_frequency.csv na mesma pasta do script."
+            "Coloque o arquivo letter-frequencies.csv na mesma pasta do script."
         )
 
     perfis = {}
 
-    with open(caminho, newline="", encoding="utf-8") as f: #Abre o arquivo CSV de forma segura
-        leitor = csv.DictReader(f, delimiter=";") #Usa a ferramenta de CSV para ler o arquivo como uma série de dicionários, o que facilita o acesso aos dados por nome de coluna
-        idiomas = [col for col in leitor.fieldnames if col != "Letter"] #Pega os nomes de todas as colunas do cabeçalho do CSV
+    with open(caminho, newline="", encoding="utf-8") as f:
+        leitor = csv.DictReader(f, delimiter=",")
+        idiomas = [col for col in leitor.fieldnames if col != "Letter"]
 
         for idioma in idiomas:
             perfis[idioma] = {}
 
-        for linha in leitor: #Lê o arquivo linha por linha
+        for linha in leitor:
             letra = linha["Letter"].strip()
             for idioma in idiomas:
-                perfis[idioma][letra] = _parse_pct(linha[idioma]) #Monta o dicionário de perfis
+                perfis[idioma][letra] = _parse_pct(linha[idioma])
 
     return perfis
 
@@ -211,8 +212,7 @@ def _distancia_euclidiana(freq_a: dict, freq_b: dict) -> float:
 
 
 def _similaridade_cosseno(freq_a: dict, freq_b: dict) -> float:
-    """Similaridade de cosseno entre dois perfis (0 = ortogonal, 1 = identico).
-    Calcula a similaridade entre o texto da URL e cada idioma do gabarito."""
+    """Similaridade de cosseno entre dois perfis (0 = ortogonal, 1 = identico)."""
     todas_letras = set(freq_a) | set(freq_b)
     dot = sum(freq_a.get(l, 0) * freq_b.get(l, 0) for l in todas_letras)
     norm_a = math.sqrt(sum(v ** 2 for v in freq_a.values()))
@@ -224,10 +224,10 @@ def _similaridade_cosseno(freq_a: dict, freq_b: dict) -> float:
 
 def _bonus_exclusividade(freq_texto: dict, perfis: dict) -> dict:
     """
-    Calcula um bônus por idioma baseado em letras que aparecem no texto
+    Calcula um bonus por idioma baseado em letras que aparecem no texto
     e que sao exclusivas (ou quase) de certos idiomas.
-    Ex: 'a tilde' (a com til) só existe em português — se o texto tem essa letra,
-    é um forte sinal de que o idioma é portugues.
+    Ex: 'a tilde' (a com til) so existe em portugues — se o texto tem essa letra,
+    e um forte sinal de que o idioma e portugues.
     """
     bonus = {idioma: 0.0 for idioma in perfis}
     for letra, freq_t in freq_texto.items():
@@ -237,7 +237,7 @@ def _bonus_exclusividade(freq_texto: dict, perfis: dict) -> dict:
         nao_tem = {i for i in perfis if perfis[i].get(letra, 0) == 0}
         if not tem or not nao_tem:
             continue
-        # Quanto menos idiomas tiverem a letra, mais exclusiva ela é
+        # Quanto menos idiomas tiverem a letra, mais exclusiva ela e
         exclusividade = len(nao_tem) / len(perfis)
         for idioma in tem:
             bonus[idioma] += freq_t * exclusividade
@@ -272,29 +272,29 @@ def comparar_perfis(freq_texto: dict, perfis: dict, metodo: str = "cosseno") -> 
         x_norm = bonus[idioma] / (max_x + 1e-9)
         scores_final[idioma] = b_norm * 0.6 + x_norm * 0.4
 
-    melhor = max(scores_final, key=scores_final.get) #encontra o idioma com o melhor score final
+    melhor = max(scores_final, key=scores_final.get)
     return melhor, scores_final[melhor], scores_final
 
 
 # ─────────────────────────────────────────────
-# 6. Função principal
+# 6. Funcao principal
 # ─────────────────────────────────────────────
 
 def main():
-    # URL: Verifica se utilizou argumento de linha de comando ou input interativo
+    # URL: argumento de linha de comando ou input interativo
     if len(sys.argv) > 1:
         url = sys.argv[1]
     else:
         url = input("Digite a URL da pagina a analisar: ").strip()
 
     pasta_script = Path(__file__).parent
-    caminho_csv = pasta_script / "letter_frequency.csv"
+    caminho_csv = pasta_script / "letter-frequencies.csv"
 
     print(f"\n[+] Baixando conteudo de: {url}")
     texto_bruto = baixar_texto(url)
 
     print("[+] Limpando texto (extraindo apenas conteudo textual do HTML)...")
-    texto_limpo = limpar_texto(texto_bruto, remover_acentos=False)
+    texto_limpo = limpar_texto(texto_bruto, remover_acentos=True)
     print(f"    {len(texto_limpo):,} letras analisadas.")
 
     print("[+] Calculando frequencias...")
