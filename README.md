@@ -1,10 +1,10 @@
 # Identificador de Idioma por Frequência de Letras
 
-Detecta o idioma de uma página web comparando a frequência relativa das letras do texto com perfis de referência extraídos do arquivo `letter_frequency.csv`.
+Detecta o idioma de uma página web comparando a frequência relativa das letras do texto com perfis de referência extraídos do arquivo `letter-frequencies.csv`.
 
 ## Idiomas suportados
 
-French, German, Spanish, Portuguese, Esperanto, Italian, Turkish, Swedish, Polish, Dutch, Danish, Icelandic, Finnish, Czech
+English, French, German, Spanish, Portuguese, Esperanto, Italian, Turkish, Swedish, Polish, Dutch, Danish, Icelandic, Finnish, Czech
 
 ## Dependências
 
@@ -16,7 +16,7 @@ pip install requests
 
 ## Como executar
 
-Coloque `identificador_idioma.py` e `letter_frequency.csv` na **mesma pasta**. Então:
+Coloque `identificador_idioma.py` e `letter-frequencies.csv` na **mesma pasta**. Então:
 
 ```bash
 # Modo interativo (o programa pede a URL)
@@ -34,7 +34,7 @@ python identificador_idioma.py https://pt.wikipedia.org/wiki/Brasil
     54,321 letras analisadas.
 [+] Calculando frequencias...
 [+] Carregando perfis de referencia...
-    14 idiomas carregados: French, German, Spanish, Portuguese, ...
+    15 idiomas carregados: English, French, German, Spanish, Portuguese, ...
 [+] Comparando perfis (similaridade de cosseno)...
 
 =======================================================
@@ -45,8 +45,8 @@ python identificador_idioma.py https://pt.wikipedia.org/wiki/Brasil
   Ranking completo de idiomas:
    1. Portuguese   1.0000 <-- melhor
    2. Spanish      0.8238
-   3. Czech        0.6195
-   4. Italian      0.6077
+   3. Italian      0.6077
+   4. French       0.5127
    ...
 
   Top 5 letras no texto:
@@ -66,7 +66,7 @@ Usa `requests.get()` com um header `User-Agent` simulando um navegador Chrome. I
 A extração do texto ocorre em três etapas:
 
 **Etapa 1 — Remove blocos de ruído inteiros:**
-Tags `<script>`, `<style>`, `<head>`, `<noscript>`, `<nav>`, `<footer>` e `<header>` são apagadas por completo, incluindo seu conteúdo. Isso evita que código JavaScript, CSS e menus de navegação (frequentemente em inglês) contaminem a análise.
+Tags `<script>`, `<style>`, `<head>`, `<noscript>`, `<nav>`, `<footer>` e `<header>` são apagadas por completo, incluindo seu conteúdo. Isso evita que código JavaScript, CSS e menus de navegação contaminem a análise.
 
 **Etapa 2 — Extrai apenas tags de conteúdo textual:**
 Coleta o interior de `<p>`, `<h1>`–`<h6>`, `<blockquote>`, `<figcaption>`, `<article>`, `<main>`, `<td>` e `<th>`. Tags como `<div>` e `<span>` são **excluídas** propositalmente — em sites como a Wikipedia elas carregam imenso conteúdo de interface (caixas de navegação, categorias, templates) que distorce o perfil de frequência.
@@ -78,7 +78,7 @@ Se nenhuma tag de parágrafo for encontrada, tenta `<li>`, `<section>` e `<div>`
 Conta cada letra e calcula seu percentual sobre o total de letras do texto limpo.
 
 ### 4. Carregamento dos perfis (`carregar_perfis`)
-Lê o `letter_frequency.csv` com delimitador `;`, detecta os idiomas automaticamente pelas colunas e converte os valores percentuais (ex: `7.636%`, `9.600%*`) para float, ignorando o `*` que marca estimativas no CSV.
+Lê o `letter-frequencies.csv` com delimitador `,` e detecta os idiomas automaticamente pelas colunas. Converte os valores percentuais (ex: `7.636`, `9.600*`) para float, ignorando o `*` que marca estimativas no CSV.
 
 ### 5. Comparação de perfis (`comparar_perfis`)
 Usa dois critérios combinados para identificar o idioma:
@@ -96,9 +96,17 @@ Score final por idioma:
 score = (cosseno_normalizado × 0.6) + (bonus_normalizado × 0.4)
 ```
 
-## Observação sobre inglês
+## Formato do CSV de referência
 
-Inglês não está no CSV de referência. Para páginas em inglês, o programa retornará o idioma mais próximo (geralmente Dutch ou German). Para adicionar suporte ao inglês, basta incluir uma coluna `English` com as frequências no `letter_frequency.csv` — o programa detecta idiomas automaticamente pelas colunas do arquivo.
+O arquivo `letter-frequencies.csv` usa vírgula (`,`) como delimitador. A primeira coluna deve se chamar `Letter` e cada coluna seguinte representa um idioma:
+
+```
+Letter,English,French,German,Spanish,Portuguese,...
+a,8.167,7.636,6.516,11.525,14.634,...
+b,1.492,0.901,1.886,2.215,1.043,...
+```
+
+Para adicionar um novo idioma, basta incluir uma nova coluna com o nome do idioma e as frequências de cada letra — o programa detecta automaticamente.
 
 ## Personalização
 
@@ -106,4 +114,4 @@ Inglês não está no CSV de referência. Para páginas em inglês, o programa r
 |---|---|---|
 | `remover_acentos=True` | chamada de `limpar_texto()` na `main()` | Remove diacríticos antes da análise |
 | `metodo="euclidiana"` | chamada de `comparar_perfis()` na `main()` | Usa distância euclidiana em vez de cosseno |
-| Adicionar idioma | Nova coluna no `letter_frequency.csv` | Detectado automaticamente |
+| Adicionar idioma | Nova coluna no `letter-frequencies.csv` | Detectado automaticamente |
