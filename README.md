@@ -115,3 +115,9 @@ Para adicionar um novo idioma, basta incluir uma nova coluna com o nome do idiom
 | `remover_acentos=True` | chamada de `limpar_texto()` na `main()` | Remove diacríticos antes da análise |
 | `metodo="euclidiana"` | chamada de `comparar_perfis()` na `main()` | Usa distância euclidiana em vez de cosseno |
 | Adicionar idioma | Nova coluna no `letter-frequencies.csv` | Detectado automaticamente |
+
+## Fonte dos dados
+
+O arquivo `letter-frequencies.csv` foi obtido de:
+[Letter Frequencies CSV](https://gist.github.com/CliffordAnderson/b9b204a6d55b06bedd511326afd3e8b9#file-letter-frequencies-csv)
+por **Clifford Anderson**, disponível publicamente no GitHub Gist.
